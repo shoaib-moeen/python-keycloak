@@ -85,6 +85,7 @@ class ConnectionManager(object):
 
         if proxies:
             self._s.proxies.update(proxies)
+        
 
     def __del__(self):
         """Del method."""

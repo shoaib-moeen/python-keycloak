@@ -9,6 +9,7 @@ import freezegun
 import pytest
 from dateutil import parser as datetime_parser
 from packaging.version import Version
+import threading
 
 import keycloak
 from keycloak import KeycloakAdmin, KeycloakOpenID, KeycloakOpenIDConnection
@@ -3062,3 +3063,214 @@ def test_refresh_token(admin: KeycloakAdmin):
     assert admin.connection.token is not None
     admin.user_logout(admin.get_user_id(admin.connection.username))
     admin.connection.refresh_token()
+
+
+def test_a_realms(admin: KeycloakAdmin):
+    """Test realms.
+
+    :param admin: Keycloak Admin client
+    :type admin: KeycloakAdmin
+    """
+    # Get realms
+    t = admin.a_get_realms()
+    realms = t.join()
+    assert len(realms) == 1, realms
+    assert "master" == realms[0]["realm"]
+
+    # Create a test realm
+    t = admin.a_create_realm(payload={"realm": "test"})
+    res = t.join()
+    assert res == b"", res
+
+    # Create the same realm, should fail
+    with pytest.raises(KeycloakPostError) as err:
+        admin.create_realm(payload={"realm": "test"})
+    assert err.match('409: b\'{"errorMessage":"Conflict detected. See logs for details"}\'')
+
+    # Create the same realm, skip_exists true
+    t = admin.a_create_realm(payload={"realm": "test"}, skip_exists=True)
+    res = t.join()
+    assert res == {"msg": "Already exists"}, res
+
+    # Get a single realm
+    t = admin.a_get_realm(realm_name="test")
+    res = t.join()
+    assert res["realm"] == "test"
+
+    # Get non-existing realm
+    with pytest.raises(KeycloakGetError) as err:
+        admin.get_realm(realm_name="non-existent")
+    assert err.match('404: b\'{"error":"Realm not found.".*\'')
+
+    # Update realm
+    t = admin.a_update_realm(realm_name="test", payload={"accountTheme": "test"})
+    res = t.join()
+    assert res == dict(), res
+
+    # Check that the update worked
+    t = admin.a_get_realm(realm_name="test")
+    res = t.join()
+    assert res["realm"] == "test"
+    assert res["accountTheme"] == "test"
+
+    # Update wrong payload
+    with pytest.raises(KeycloakPutError) as err:
+        admin.update_realm(realm_name="test", payload={"wrong": "payload"})
+    assert err.match('400: b\'{"error":"Unrecognized field')
+
+    # Check that get realms returns both realms
+    t = admin.a_get_realms()
+    res = t.join()
+    realm_names = [x["realm"] for x in realms]
+    assert len(realms) == 2, realms
+    assert "master" in realm_names, realm_names
+    assert "test" in realm_names, realm_names
+
+    # Delete the realm
+    t = admin.a_delete_realm(realm_name="test")
+    res = t.join()
+    assert res == dict(), res
+
+    # Check that the realm does not exist anymore
+    with pytest.raises(KeycloakGetError) as err:
+        admin.get_realm(realm_name="test")
+    assert err.match('404: b\'{"error":"Realm not found.".*}\'')
+
+    # Delete non-existing realm
+    with pytest.raises(KeycloakDeleteError) as err:
+        admin.delete_realm(realm_name="non-existent")
+    assert err.match('404: b\'{"error":"Realm not found.".*}\'')
+
+
+def test_a_changing_of_realms(admin: KeycloakAdmin, realm: str):
+    """Test changing of realms.
+
+    :param admin: Keycloak Admin client
+    :type admin: KeycloakAdmin
+    :param realm: Keycloak realm
+    :type realm: str
+    """
+    t = admin.a_get_current_realm()
+    res = t.join()
+    assert res == "master"
+    t = admin.a_change_current_realm(realm)
+    t.join()
+    assert admin.get_current_realm() == realm
+
+def test_a_users(admin: KeycloakAdmin, realm: str):
+    """Test users.
+
+    :param admin: Keycloak Admin client
+    :type admin: KeycloakAdmin
+    :param realm: Keycloak realm
+    :type realm: str
+    """
+    admin.change_current_realm(realm)
+
+    # Check no users present
+    t = admin.a_get_users()
+    users = t.join()
+    assert users == list(), users
+
+    # Test create user
+    t = admin.a_create_user(payload={"username": "test", "email": "test@test.test"})
+    user_id = t.join()
+    assert user_id is not None, user_id
+
+    # Test create the same user
+    with pytest.raises(KeycloakPostError) as err:
+        admin.create_user(payload={"username": "test", "email": "test@test.test"})
+    assert err.match(".*User exists with same.*")
+
+    # Test create the same user, exists_ok true
+    t = admin.a_create_user(
+        payload={"username": "test", "email": "test@test.test"}, exist_ok=True
+    )
+    user_id_2 = t.join()
+    assert user_id == user_id_2
+
+    # Test get user
+    t = admin.a_get_user(user_id=user_id)
+    user = t.join()
+    assert user["username"] == "test", user["username"]
+    assert user["email"] == "test@test.test", user["email"]
+
+    # Test update user
+    t = admin.a_update_user(user_id=user_id, payload={"firstName": "Test"})
+    res = t.join()
+    assert res == dict(), res
+    t = admin.a_get_user(user_id=user_id)
+    user = t.join()
+    assert user["firstName"] == "Test"
+
+    # Test update user fail
+    with pytest.raises(KeycloakPutError) as err:
+        admin.update_user(user_id=user_id, payload={"wrong": "payload"})
+    assert err.match('400: b\'{"error":"Unrecognized field')
+
+    # Test disable user
+    t = admin.a_disable_user(user_id=user_id)
+    res = t.join()
+    assert res == {}, res
+    assert not admin.get_user(user_id=user_id)["enabled"]
+
+    # Test enable user
+    res = admin.a_enable_user(user_id=user_id)
+    res = t.join()
+    assert res == {}, res
+    assert admin.get_user(user_id=user_id)["enabled"]
+
+    # Test get users again
+    t = admin.a_get_users()
+    users = t.join()
+    usernames = [x["username"] for x in users]
+    assert "test" in usernames
+
+    # Test users counts
+    t = admin.a_users_count()
+    count = t.join()
+    assert count == 1, count
+
+    # Test users count with query
+    t = admin.a_users_count(query={"username": "notpresent"})
+    count = t.join()
+    assert count == 0
+
+    # Test user groups
+    groups = admin.get_user_groups(user_id=user["id"])
+    assert len(groups) == 0
+
+    # Test user groups bad id
+    with pytest.raises(KeycloakGetError) as err:
+        admin.get_user_groups(user_id="does-not-exist")
+    assert err.match(USER_NOT_FOUND_REGEX)
+
+    # Test logout
+    res = admin.user_logout(user_id=user["id"])
+    assert res == dict(), res
+
+    # Test logout fail
+    with pytest.raises(KeycloakPostError) as err:
+        admin.user_logout(user_id="non-existent-id")
+    assert err.match(USER_NOT_FOUND_REGEX)
+
+    # Test consents
+    res = admin.user_consents(user_id=user["id"])
+    assert len(res) == 0, res
+
+    # Test consents fail
+    with pytest.raises(KeycloakGetError) as err:
+        admin.user_consents(user_id="non-existent-id")
+    assert err.match(USER_NOT_FOUND_REGEX)
+
+    # Test delete user
+    res = admin.delete_user(user_id=user_id)
+    assert res == dict(), res
+    with pytest.raises(KeycloakGetError) as err:
+        admin.get_user(user_id=user_id)
+    err.match(USER_NOT_FOUND_REGEX)
+
+    # Test delete fail
+    with pytest.raises(KeycloakDeleteError) as err:
+        admin.delete_user(user_id="non-existent-id")
+    assert err.match(USER_NOT_FOUND_REGEX)
