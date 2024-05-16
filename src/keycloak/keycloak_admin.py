@@ -42,7 +42,7 @@ from .exceptions import (
     raise_error_from_response,
 )
 from .openid_connection import KeycloakOpenIDConnection
-
+from .thread import ThreadWithReturnValue
 
 class KeycloakAdmin:
     """Keycloak Admin client.
@@ -189,6 +189,7 @@ class KeycloakAdmin:
             page += 1
         return results
 
+
     def __fetch_paginated(self, url, query=None):
         """Make a specific paginated request.
 
@@ -201,6 +202,17 @@ class KeycloakAdmin:
         """
         query = query or {}
         return raise_error_from_response(self.connection.raw_get(url, **query), KeycloakGetError)
+    
+    def async_call(self, func_name, args):
+        func = getattr(self, func_name)
+
+        if not callable(func):
+            return None
+        
+        #create a thread using threading and run func in that thread
+        thread = ThreadWithReturnValue(target=func, args=args)
+        thread.start()
+        return thread
 
     def get_current_realm(self) -> str:
         """Return the currently configured realm.
@@ -258,6 +270,7 @@ class KeycloakAdmin:
             data=json.dumps(payload),
         )
         return raise_error_from_response(data_raw, KeycloakPostError, expected_codes=[200])
+    
 
     def export_realm(self, export_clients=False, export_groups_and_role=False):
         """Export the realm configurations in the json format.
@@ -291,6 +304,7 @@ class KeycloakAdmin:
         """
         data_raw = self.connection.raw_get(urls_patterns.URL_ADMIN_REALMS)
         return raise_error_from_response(data_raw, KeycloakGetError)
+    
 
     def get_realm(self, realm_name):
         """Get a specific realm.
@@ -306,6 +320,7 @@ class KeycloakAdmin:
         params_path = {"realm-name": realm_name}
         data_raw = self.connection.raw_get(urls_patterns.URL_ADMIN_REALM.format(**params_path))
         return raise_error_from_response(data_raw, KeycloakGetError, expected_codes=[200])
+    
 
     def create_realm(self, payload, skip_exists=False):
         """Create a realm.
@@ -348,6 +363,8 @@ class KeycloakAdmin:
             urls_patterns.URL_ADMIN_REALM.format(**params_path), data=json.dumps(payload)
         )
         return raise_error_from_response(data_raw, KeycloakPutError, expected_codes=[204])
+    
+
 
     def delete_realm(self, realm_name):
         """Delete a realm.
@@ -360,6 +377,7 @@ class KeycloakAdmin:
         params_path = {"realm-name": realm_name}
         data_raw = self.connection.raw_delete(urls_patterns.URL_ADMIN_REALM.format(**params_path))
         return raise_error_from_response(data_raw, KeycloakDeleteError, expected_codes=[204])
+    
 
     def get_users(self, query=None):
         """Get all users.
@@ -399,6 +417,8 @@ class KeycloakAdmin:
             urls_patterns.URL_ADMIN_IDPS.format(**params_path), data=json.dumps(payload)
         )
         return raise_error_from_response(data_raw, KeycloakPostError, expected_codes=[201])
+    
+
 
     def update_idp(self, idp_alias, payload):
         """Update an ID Provider.
@@ -418,6 +438,8 @@ class KeycloakAdmin:
             urls_patterns.URL_ADMIN_IDP.format(**params_path), data=json.dumps(payload)
         )
         return raise_error_from_response(data_raw, KeycloakPutError, expected_codes=[204])
+    
+
 
     def add_mapper_to_idp(self, idp_alias, payload):
         """Create an ID Provider.
@@ -437,6 +459,7 @@ class KeycloakAdmin:
             urls_patterns.URL_ADMIN_IDP_MAPPERS.format(**params_path), data=json.dumps(payload)
         )
         return raise_error_from_response(data_raw, KeycloakPostError, expected_codes=[201])
+    
 
     def update_mapper_in_idp(self, idp_alias, mapper_id, payload):
         """Update an IdP mapper.
@@ -465,6 +488,7 @@ class KeycloakAdmin:
         )
 
         return raise_error_from_response(data_raw, KeycloakPutError, expected_codes=[204])
+    
 
     def get_idp_mappers(self, idp_alias):
         """Get IDP mappers.
@@ -484,6 +508,7 @@ class KeycloakAdmin:
             urls_patterns.URL_ADMIN_IDP_MAPPERS.format(**params_path)
         )
         return raise_error_from_response(data_raw, KeycloakGetError)
+    
 
     def get_idps(self):
         """Get IDPs.
@@ -499,6 +524,7 @@ class KeycloakAdmin:
         params_path = {"realm-name": self.connection.realm_name}
         data_raw = self.connection.raw_get(urls_patterns.URL_ADMIN_IDPS.format(**params_path))
         return raise_error_from_response(data_raw, KeycloakGetError)
+    
 
     def get_idp(self, idp_alias):
         """Get IDP provider.
@@ -516,6 +542,7 @@ class KeycloakAdmin:
         params_path = {"realm-name": self.connection.realm_name, "alias": idp_alias}
         data_raw = self.connection.raw_get(urls_patterns.URL_ADMIN_IDP.format(**params_path))
         return raise_error_from_response(data_raw, KeycloakGetError)
+    
 
     def delete_idp(self, idp_alias):
         """Delete an ID Provider.
@@ -528,6 +555,7 @@ class KeycloakAdmin:
         params_path = {"realm-name": self.connection.realm_name, "alias": idp_alias}
         data_raw = self.connection.raw_delete(urls_patterns.URL_ADMIN_IDP.format(**params_path))
         return raise_error_from_response(data_raw, KeycloakDeleteError, expected_codes=[204])
+    
 
     def create_user(self, payload, exist_ok=False):
         """Create a new user.
@@ -579,6 +607,7 @@ class KeycloakAdmin:
         )
         return raise_error_from_response(data_raw, KeycloakGetError)
 
+
     def get_user_id(self, username):
         """Get internal keycloak user id from username.
 
@@ -596,6 +625,7 @@ class KeycloakAdmin:
         lower_user_name = username.lower()
         users = self.get_users(query={"username": lower_user_name, "max": 1, "exact": True})
         return users[0]["id"] if len(users) == 1 else None
+    
 
     def get_user(self, user_id):
         """Get representation of the user.
@@ -610,6 +640,7 @@ class KeycloakAdmin:
         params_path = {"realm-name": self.connection.realm_name, "id": user_id}
         data_raw = self.connection.raw_get(urls_patterns.URL_ADMIN_USER.format(**params_path))
         return raise_error_from_response(data_raw, KeycloakGetError)
+    
 
     def get_user_groups(self, user_id, query=None, brief_representation=True):
         """Get user groups.
@@ -639,6 +670,7 @@ class KeycloakAdmin:
             return self.__fetch_paginated(url, query)
 
         return self.__fetch_all(url, query)
+    
 
     def update_user(self, user_id, payload):
         """Update the user.
@@ -656,6 +688,7 @@ class KeycloakAdmin:
             urls_patterns.URL_ADMIN_USER.format(**params_path), data=json.dumps(payload)
         )
         return raise_error_from_response(data_raw, KeycloakPutError, expected_codes=[204])
+    
 
     def disable_user(self, user_id):
         """Disable the user from the realm. Disabled users can not log in.
@@ -667,6 +700,7 @@ class KeycloakAdmin:
         :rtype: bytes
         """
         return self.update_user(user_id=user_id, payload={"enabled": False})
+    
 
     def enable_user(self, user_id):
         """Enable the user from the realm.
@@ -678,6 +712,7 @@ class KeycloakAdmin:
         :rtype: bytes
         """
         return self.update_user(user_id=user_id, payload={"enabled": True})
+    
 
     def disable_all_users(self):
         """Disable all existing users."""
@@ -686,12 +721,14 @@ class KeycloakAdmin:
             user_id = user["id"]
             self.disable_user(user_id=user_id)
 
+
     def enable_all_users(self):
         """Disable all existing users."""
         users = self.get_users()
         for user in users:
             user_id = user["id"]
             self.enable_user(user_id=user_id)
+
 
     def delete_user(self, user_id):
         """Delete the user.
@@ -704,6 +741,7 @@ class KeycloakAdmin:
         params_path = {"realm-name": self.connection.realm_name, "id": user_id}
         data_raw = self.connection.raw_delete(urls_patterns.URL_ADMIN_USER.format(**params_path))
         return raise_error_from_response(data_raw, KeycloakDeleteError, expected_codes=[204])
+    
 
     def set_user_password(self, user_id, password, temporary=True):
         """Set up a password for the user.
@@ -729,6 +767,7 @@ class KeycloakAdmin:
             urls_patterns.URL_ADMIN_RESET_PASSWORD.format(**params_path), data=json.dumps(payload)
         )
         return raise_error_from_response(data_raw, KeycloakPutError, expected_codes=[204])
+    
 
     def get_credentials(self, user_id):
         """Get user credentials.
@@ -748,6 +787,7 @@ class KeycloakAdmin:
             urls_patterns.URL_ADMIN_USER_CREDENTIALS.format(**params_path)
         )
         return raise_error_from_response(data_raw, KeycloakGetError)
+    
 
     def delete_credential(self, user_id, credential_id):
         """Delete credential of the user.
@@ -4247,3 +4287,406 @@ class KeycloakAdmin:
             urls_patterns.URL_ADMIN_CLEAR_USER_CACHE.format(**params_path), data=""
         )
         return raise_error_from_response(data_raw, KeycloakPostError, expected_codes=[204])
+
+
+    def a___fetch_all(self, url, query=None):
+        return self.async_call('__fetch_all', (url, query))
+
+    def a___fetch_paginated(self, url, query=None):
+        return self.async_call('__fetch_paginated', (url, query))
+
+    def a_get_current_realm(self) -> str:
+        return self.async_call('get_current_realm', ())
+
+    def a_change_current_realm(self, realm_name: str) -> None:
+        return self.async_call('change_current_realm', (realm_name,))
+
+    def a_import_realm(self, payload):
+        return self.async_call('import_realm', (payload,))
+
+    def a_partial_import_realm(self, realm_name, payload):
+        return self.async_call('partial_import_realm', (realm_name, payload))
+
+    def a_export_realm(self, export_clients=False, export_groups_and_role=False):
+        return self.async_call('export_realm', (export_clients, export_groups_and_role))
+
+    def a_get_realms(self):
+        return self.async_call('get_realms', ())
+
+    def a_get_realm(self, realm_name):
+        return self.async_call('get_realm', (realm_name,))
+
+    def a_create_realm(self, payload, skip_exists=False):
+        return self.async_call('create_realm', (payload, skip_exists))
+
+    def a_update_realm(self, realm_name, payload):
+        return self.async_call('update_realm', (realm_name, payload))
+
+    def a_delete_realm(self, realm_name):
+        return self.async_call('delete_realm', (realm_name,))
+
+    def a_get_users(self, query=None):
+        return self.async_call('get_users', (query,))
+
+    def a_create_idp(self, payload):
+        return self.async_call('create_idp', (payload,))
+
+    def a_update_idp(self, idp_alias, payload):
+        return self.async_call('update_idp', (idp_alias, payload))
+
+    def a_add_mapper_to_idp(self, idp_alias, payload):
+        return self.async_call('add_mapper_to_idp', (idp_alias, payload))
+
+    def a_update_mapper_in_idp(self, idp_alias, mapper_id, payload):
+        return self.async_call('update_mapper_in_idp', (idp_alias, mapper_id, payload))
+
+    def a_get_idp_mappers(self, idp_alias):
+        return self.async_call('get_idp_mappers', (idp_alias,))
+
+    def a_get_idps(self):
+        return self.async_call('get_idps', ())
+
+    def a_get_idp(self, idp_alias):
+        return self.async_call('get_idp', (idp_alias,))
+
+    def a_delete_idp(self, idp_alias):
+        return self.async_call('delete_idp', (idp_alias,))
+
+    def a_create_user(self, payload, exist_ok=False):
+        print('test function run')
+        return self.async_call('create_user', (payload, exist_ok))
+
+    def a_users_count(self, query=None):
+        return self.async_call('users_count', (query,))
+
+    def a_async_users_count(self, query=None):
+        return self.async_call('async_users_count', (query,))
+
+    def a_get_user_id(self, username):
+        return self.async_call('get_user_id', (username,))
+
+    def a_get_user(self, user_id):
+        return self.async_call('get_user', (user_id,))
+
+    def a_get_user_groups(self, user_id, query=None, brief_representation=True):
+        return self.async_call('get_user_groups', (user_id, query, brief_representation))
+
+    def a_update_user(self, user_id, payload):
+        return self.async_call('update_user', (user_id, payload))
+
+    def a_disable_user(self, user_id):
+        return self.async_call('disable_user', (user_id,))
+
+    def a_enable_user(self, user_id):
+        return self.async_call('enable_user', (user_id,))
+
+    def a_disable_all_users(self):
+        return self.async_call('disable_all_users', ())
+
+    def a_enable_all_users(self):
+        return self.async_call('enable_all_users', ())
+
+    def a_delete_user(self, user_id):
+        return self.async_call('delete_user', (user_id,))
+
+    def a_set_user_password(self, user_id, password, temporary=True):
+        return self.async_call('set_user_password', (user_id, password, temporary))
+
+    def a_get_credentials(self, user_id):
+        return self.async_call('get_credentials', (user_id,))
+
+    def a_delete_credential(self, user_id, credential_id):
+        return self.async_call('delete_credential', (user_id, credential_id))
+
+    def a_user_logout(self, user_id):
+        return self.async_call('user_logout', (user_id,))
+
+    def a_user_consents(self, user_id):
+        return self.async_call('user_consents', (user_id,))
+
+    def a_get_user_social_logins(self, user_id):
+        return self.async_call('get_user_social_logins', (user_id,))
+
+    def a_add_user_social_login(self, user_id, provider_id, provider_userid, provider_username):
+        return self.async_call('add_user_social_login', (user_id, provider_id, provider_userid, provider_username))
+
+    def a_delete_user_social_login(self, user_id, provider_id):
+        return self.async_call('delete_user_social_login', (user_id, provider_id))
+
+    def a_send_verify_email(self, user_id, client_id=None, redirect_uri=None):
+        return self.async_call('send_verify_email', (user_id, client_id, redirect_uri))
+
+    def a_get_sessions(self, user_id):
+        return self.async_call('get_sessions', (user_id,))
+
+    def a_get_server_info(self):
+        return self.async_call('get_server_info', ())
+
+    def a_get_groups(self, query=None, full_hierarchy=False):
+        return self.async_call('get_groups', (query, full_hierarchy))
+
+    def a_get_group(self, group_id, full_hierarchy=False):
+        return self.async_call('get_group', (group_id, full_hierarchy))
+
+    def a_get_subgroups(self, group, path):
+        return self.async_call('get_subgroups', (group, path))
+
+    def a_get_group_children(self, group_id, query=None, full_hierarchy=False):
+        return self.async_call('get_group_children', (group_id, query, full_hierarchy))
+
+    def a_get_group_members(self, group_id, query=None):
+        return self.async_call('get_group_members', (group_id, query))
+
+    def a_get_group_by_path(self, path):
+        return self.async_call('get_group_by_path', (path,))
+
+    def a_create_group(self, payload, parent=None, skip_exists=False):
+        return self.async_call('create_group', (payload, parent, skip_exists))
+
+    def a_update_group(self, group_id, payload):
+        return self.async_call('update_group', (group_id, payload))
+
+    def a_groups_count(self, query=None):
+        return self.async_call('groups_count', (query,))
+
+    def a_group_set_permissions(self, group_id, enabled=True):
+        return self.async_call('group_set_permissions', (group_id, enabled))
+
+    def a_group_user_add(self, user_id, group_id):
+        return self.async_call('group_user_add', (user_id, group_id))
+
+    def a_group_user_remove(self, user_id, group_id):
+        return self.async_call('group_user_remove', (user_id, group_id))
+
+    def a_delete_group(self, group_id):
+        return self.async_call('delete_group', (group_id,))
+
+    def a_get_clients(self):
+        return self.async_call('get_clients', ())
+
+    def a_get_client(self, client_id):
+        return self.async_call('get_client', (client_id,))
+
+    def a_get_client_id(self, client_id):
+        return self.async_call('get_client_id', (client_id,))
+
+    def a_get_client_authz_settings(self, client_id):
+        return self.async_call('get_client_authz_settings', (client_id,))
+
+    def a_create_client_authz_resource(self, client_id, payload, skip_exists=False):
+        return self.async_call('create_client_authz_resource', (client_id, payload, skip_exists))
+
+    def a_update_client_authz_resource(self, client_id, resource_id, payload):
+        return self.async_call('update_client_authz_resource', (client_id, resource_id, payload))
+
+    def a_delete_client_authz_resource(self, client_id: str, resource_id: str):
+        return self.async_call('delete_client_authz_resource', (client_id, resource_id))
+
+    def a_get_client_authz_resources(self, client_id):
+        return self.async_call('get_client_authz_resources', (client_id,))
+
+    def a_get_client_authz_resource(self, client_id: str, resource_id: str):
+        return self.async_call('get_client_authz_resource', (client_id, resource_id))
+
+    def a_create_client_authz_role_based_policy(self, client_id, payload, skip_exists=False):
+        return self.async_call('create_client_authz_role_based_policy', (client_id, payload, skip_exists))
+
+    def a_create_client_authz_policy(self, client_id, payload, skip_exists=False):
+        return self.async_call('create_client_authz_policy', (client_id, payload, skip_exists))
+
+    def a_create_client_authz_resource_based_permission(self, client_id, payload, skip_exists=False):
+        return self.async_call('create_client_authz_resource_based_permission', (client_id, payload, skip_exists))
+    
+    def a_create_client_authz_scopes(self, client_id, payload):
+        return self.async_call('create_client_authz_scopes', (client_id, payload))
+
+    def a_get_client_authz_permissions(self, client_id):
+        return self.async_call('get_client_authz_permissions', (client_id,))
+
+    def a_get_client_authz_policies(self, client_id):
+        return self.async_call('get_client_authz_policies', (client_id,))
+
+    def a_delete_client_authz_policy(self, client_id, policy_id):
+        return self.async_call('delete_client_authz_policy', (client_id, policy_id))
+
+    def a_get_client_authz_policy(self, client_id, policy_id):
+        return self.async_call('get_client_authz_policy', (client_id, policy_id))
+
+    def a_get_client_service_account_user(self, client_id):
+        return self.async_call('get_client_service_account_user', (client_id,))
+
+    def a_get_client_default_client_scopes(self, client_id):
+        return self.async_call('get_client_default_client_scopes', (client_id,))
+
+    def a_add_client_default_client_scope(self, client_id, client_scope_id, payload):
+        return self.async_call('add_client_default_client_scope', (client_id, client_scope_id, payload))
+
+    def a_delete_client_default_client_scope(self, client_id, client_scope_id):
+        return self.async_call('delete_client_default_client_scope', (client_id, client_scope_id))
+
+    def a_get_client_optional_client_scopes(self, client_id):
+        return self.async_call('get_client_optional_client_scopes', (client_id,))
+
+    def a_add_client_optional_client_scope(self, client_id, client_scope_id, payload):
+        return self.async_call('add_client_optional_client_scope', (client_id, client_scope_id, payload))
+
+    def a_delete_client_optional_client_scope(self, client_id, client_scope_id):
+        return self.async_call('delete_client_optional_client_scope', (client_id, client_scope_id))
+
+    def a_create_initial_access_token(self, count: int = 1, expiration: int = 1):
+        return self.async_call('create_initial_access_token', (count, expiration))
+
+    def a_create_client(self, payload, skip_exists=False):
+        return self.async_call('create_client', (payload, skip_exists))
+
+    def a_update_client(self, client_id, payload):
+        return self.async_call('update_client', (client_id, payload))
+
+    def a_delete_client(self, client_id):
+        return self.async_call('delete_client', (client_id))
+
+    def a_get_client_installation_provider(self, client_id, provider_id):
+        return self.async_call('get_client_installation_provider', (client_id, provider_id))
+
+    def a_get_realm_roles(self, brief_representation=True, search_text=""):
+        return self.async_call('get_realm_roles', (brief_representation, search_text))
+
+    def a_get_realm_role_groups(self, role_name, query=None, brief_representation=True):
+        return self.async_call('get_realm_role_groups', (role_name, query, brief_representation))
+
+    def a_get_realm_role_members(self, role_name, query=None):
+        return self.async_call('get_realm_role_members', (role_name, query))
+
+    # Continue defining asynchronous equivalents for the remaining functions...
+
+    # For example:
+    def a_get_default_realm_role_id(self):
+        return self.async_call('get_default_realm_role_id', ())
+
+    def a_get_realm_default_roles(self):
+        return self.async_call('get_realm_default_roles', ())
+
+    def a_remove_realm_default_roles(self, payload):
+        return self.async_call('remove_realm_default_roles', (payload,))
+    
+    def a_add_realm_default_roles(self, payload):
+        return self.async_call('add_realm_default_roles', (payload,))
+
+    def a_get_client_roles(self, client_id, brief_representation=True):
+        return self.async_call('get_client_roles', (client_id, brief_representation))
+
+    def a_get_client_role(self, client_id, role_name):
+        return self.async_call('get_client_role', (client_id, role_name))
+
+    def a_get_client_role_id(self, client_id, role_name):
+        return self.async_call('get_client_role_id', (client_id, role_name))
+
+    def a_create_client_role(self, client_role_id, payload, skip_exists=False):
+        return self.async_call('create_client_role', (client_role_id, payload, skip_exists))
+
+    def a_add_composite_client_roles_to_role(self, client_role_id, role_name, roles):
+        return self.async_call('add_composite_client_roles_to_role', (client_role_id, role_name, roles))
+
+    def a_update_client_role(self, client_role_id, payload):
+        return self.async_call('update_client_role', (client_role_id, payload))
+
+    def a_delete_client_role(self, client_role_id):
+        return self.async_call('delete_client_role', (client_role_id))
+
+    def a_get_client_role_members(self, client_role_id):
+        return self.async_call('get_client_role_members', (client_role_id))
+    
+    def a_get_client_role_groups(self, client_id, role_name, **query):
+        return self.async_call('get_client_role_groups', (client_id, role_name, query))
+    
+    def a_get_role_by_id(self, role_id):
+        return self.async_call('get_role_by_id', (role_id,))
+    
+    def a_update_role_by_id(self, role_id, payload):
+        return self.async_call('update_role_by_id', (role_id, payload))
+    
+    def a_delete_role_by_id(self, role_id):
+        return self.async_call('delete_role_by_id', (role_id,))
+    
+    def a_create_realm_role(self, payload, skip_exists=False):
+        return self.async_call('create_realm_role', (payload, skip_exists))
+
+    def a_get_realm_role(self, role_name):
+        return self.async_call('get_realm_role', (role_name,)) 
+  
+    def a_get_realm_role_by_id(self, role_name):
+        return self.async_call('get_realm_role_by_id', (role_name,))
+    
+    def a_update_realm_role(self, role_name, payload):
+        return self.async_call('update_realm_role', (role_name, payload))
+    
+    def a_delete_realm_role(self, role_name):
+        return self.async_call('delete_realm_role', (role_name,))
+    
+    def a_add_composite_realm_roles_to_role(self, role_name, roles):
+        return self.async_call('add_composite_realm_roles_to_role', (role_name, roles))
+    
+    def a_remove_composite_realm_roles_to_role(self, role_name, roles):
+        return self.async_call('remove_composite_realm_roles_to_role', (role_name, roles))
+    
+    def a_get_composite_realm_roles_of_role(self, role_name):
+        return self.async_call('get_composite_realm_roles_of_role', (role_name,))
+
+    def a_assign_realm_roles_to_client_scope(self, client_id, roles):
+        return self.async_call('assign_realm_roles_to_client_scope', (client_id, roles))
+    
+    def a_delete_realm_roles_of_client_scope(self, client_id, roles):
+        return self.async_call('delete_realm_roles_of_client_scope', (client_id, roles))
+    
+    def a_get_realm_roles_of_client_scope(self, client_id):        
+        return self.async_call('get_realm_roles_of_client_scope', (client_id,))
+    
+    def assign_client_roles_to_client_scope(self, client_id, client_roles_owner_id, roles):
+        return self.async_call('assign_client_roles_to_client_scope', (client_id, client_roles_owner_id, roles))
+
+
+    def a_delete_client_roles_of_client_scope(self, client_id, client_roles_owner_id, roles):
+        return self.async_call('delete_client_roles_of_client_scope', (client_id, client_roles_owner_id, roles))
+    
+    def a_get_client_roles_of_client_scope(self, client_id, client_roles_owner_id):
+        return self.async_call('get_client_roles_of_client_scope', (client_id, client_roles_owner_id))
+    
+    def a_assign_realm_roles(self, user_id, roles):
+        return self.async_call('assign_realm_roles', (user_id, roles))
+    
+    def a_delete_realm_roles_of_user(self, user_id, roles):
+        return self.async_call('delete_realm_roles_of_user', (user_id, roles))
+    
+    def a_get_realm_roles_of_user(self, user_id):
+        return self.async_call('get_realm_roles_of_user', (user_id,))
+    
+    def a_get_available_realm_roles_of_user(self, user_id):
+        return self.async_call('get_available_realm_roles_of_user', (user_id,))
+    
+    def a_get_composite_realm_roles_of_user(self, user_id, brief_representation=True):
+        return self.async_call('get_composite_realm_roles_of_user', (user_id, brief_representation))
+    
+    def a_assign_group_realm_roles(self, group_id, roles):
+        return self.async_call('assign_group_realm_roles', (group_id, roles))
+    
+    def a_delete_group_realm_roles(self, group_id, roles):
+        return self.async_call('delete_group_realm_roles', (group_id, roles))
+    
+    def a_get_group_realm_roles(self, group_id):
+        return self.async_call('get_group_realm_roles', (group_id,))
+    
+    def a_assign_group_client_roles(self, group_id, client_id, roles):
+        return self.async_call('assign_group_client_roles', (group_id, client_id, roles))
+    
+    def a_get_group_client_roles(self, group_id, client_id):
+        return self.async_call('get_group_client_roles', (group_id, client_id))
+    
+    def a_delete_group_client_roles(self, group_id, client_id, roles):
+        return self.async_call('delete_group_client_roles', (group_id, client_id, roles))
+    
+    def a_get_all_roles_of_user(self, user_id):
+        return self.async_call('get_all_roles_of_user', (user_id,))
+    
+    def get_client_roles_of_user(self, user_id, client_id):
+        return self.async_call('get_client_roles_of_user', (user_id, client_id))
+    
